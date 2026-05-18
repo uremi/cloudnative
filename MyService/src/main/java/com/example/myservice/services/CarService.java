@@ -12,7 +12,6 @@ public class CarService {
     public void addCar(Car car) {
         cars.add(car);
     }
-system.out.println("Test Modif");
 
     public Car getCar(String plateNumber) {
         return cars.stream()
