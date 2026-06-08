@@ -2,9 +2,9 @@ name: CI - Kubernetes Integration Tests
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop]
 
 permissions:
   contents: read
@@ -16,6 +16,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
+    defaults:
+      run:
+        working-directory: ./MyService
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -23,19 +27,44 @@ jobs:
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
+          distribution: temurin
           java-version: '21'
-          cache: 'gradle'
+          cache: gradle
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
 
       - name: Run Tests
+        run: ./gradlew test
+
+      - name: Build Docker image
+        run: docker build -t myservice:latest .
+
+      - name: Start Minikube
+        uses: medyagh/setup-minikube@master
+        with:
+          driver: docker
+
+      - name: Load Docker image into Minikube
+        run: minikube image load myservice:latest
+
+      - name: Deploy to Kubernetes
         run: |
-          cd ./MyService
-          chmod +x gradlew
-          ./gradlew test
+          kubectl apply -f ../k8s/
+          kubectl wait --for=condition=Available --timeout=120s deployment/myservice-deployment
 
-      - name: Build Docker images
+      - name: Check Kubernetes resources
         run: |
-          cd ./MyService
-          docker build -t myservice:latest .
+          kubectl get pods
+          kubectl get deployments
+          kubectl get services
+          minikube service list
 
+      - name: Run Kubernetes integration test
+        run: |
+          kubectl wait --for=condition=Ready --timeout=60s pod -l app=myservice
 
+          kubectl port-forward service/myservice-service 8080:8080 &
+          sleep 10
+
+          curl --fail http://localhost:8080
