@@ -64,7 +64,7 @@ jobs:
         run: |
           kubectl wait --for=condition=Ready --timeout=60s pod -l app=myservice
 
-          SERVICE_URL=$(minikube service myservice-service --url)
-          echo "Service URL: $SERVICE_URL"
+          kubectl port-forward service/myservice-service 8080:8080 &
+          sleep 10
 
-          curl --fail "$SERVICE_URL"
+          curl --fail http://localhost:8080
