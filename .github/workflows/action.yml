@@ -27,15 +27,43 @@ jobs:
           java-version: '21'
           cache: 'gradle'
 
-      - name: Run Tests
+      - name: Start Kubernetes minikube
+        uses: medyagh/setup-minikube@master
+
+      - name: Try the Kubernetes cluster
+        run: kubectl get pods -A
+
+      - name: Build, test and build Docker image in Minikube
         run: |
-          cd ./MyService
+          export SHELL=/bin/bash
+          eval $(minikube -p minikube docker-env)
+          cd MyService
           chmod +x gradlew
-          ./gradlew test
+          ./gradlew build
+          eval $(minikube docker-env)
+          docker build -f ./Dockerfile -t local/myservice .
+          echo -n "verifying images:"
+          docker images
+          cd ..
 
-      - name: Build Docker images
+      - name: Deploy the image to minikube
+        run: kubectl apply -f k8s
+
+      - name: Wait for pods and get service URL
         run: |
-          cd ./MyService
-          docker build -t myservice:latest .
+          kubectl wait --for=condition=Ready --timeout=60s pod -l app=myservice
+          kubectl get pods
+          minikube service list
+          minikube service myservice --url
+          echo "------------------opening the service------------------"
 
+      - name: Test Kubernetes service URL
+        uses: nick-fields/retry@v2
+        with:
+          timeout_seconds: 10
+          max_attempts: 4
+          command: curl $(minikube service myservice --url)/cars
 
+      - name: Log Kubernetes pods
+        run: |
+          kubectl logs $(kubectl get pods -l app=myservice -o name)
